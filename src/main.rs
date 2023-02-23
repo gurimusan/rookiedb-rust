@@ -3,6 +3,7 @@ extern crate num;
 extern crate num_derive;
 
 mod databox;
+mod io;
 
 fn main() {
     println!("Hello, world!");

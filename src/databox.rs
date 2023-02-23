@@ -3,6 +3,12 @@ use std::cmp::Ordering;
 
 use bytes::{Bytes, BytesMut, Buf, BufMut};
 
+#[derive(Debug, PartialEq)]
+pub enum Error {
+    IllegalArgumentError(String),
+    RuntimeError(String),
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, FromPrimitive, ToPrimitive)]
 pub enum TypeId {
     Bool,
@@ -42,14 +48,15 @@ impl Type {
         Self::new(TypeId::Float, mem::size_of::<f32>())
     }
 
-    pub fn string_type(n: usize) -> Result<Self, String> {
+    pub fn string_type(n: usize) -> Result<Self, Error> {
         if n == 0 {
-            return Err("Empty strings are not supported.".to_string());
+            let e = Error::IllegalArgumentError("Empty strings are not supported.".to_string());
+            return Err(e);
         }
         Ok(Self::new(TypeId::String, n))
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, String> {
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
         let mut buf = BytesMut::new();
         buf.put_slice(bytes);
 
@@ -64,7 +71,7 @@ impl Type {
                 TypeId::Float => Ok(Self::float_type()),
                 TypeId::String => Self::string_type(size_in_bytes),
             },
-            None => Err("unreachable.".to_string()),
+            None => Err(Error::RuntimeError("unreachable.".to_string())),
         }
     }
 
@@ -110,14 +117,14 @@ impl DataBox {
         Self::Float(v)
     }
 
-    pub fn string_databox(v: String, n: usize) -> Result<Self, String> {
+    pub fn string_databox(v: String, n: usize) -> Result<Self, Error> {
         if n == 0 {
-            return Err(format!("Cannot construct a {}-byte string. Strings must be at least one byte.", n).to_string());
+            return Err(Error::IllegalArgumentError(format!("Cannot construct a {}-byte string. Strings must be at least one byte.", n).to_string()));
         }
         Ok(Self::String(v, n))
     }
 
-    pub fn get_type(&self) -> Result<Type, String> {
+    pub fn get_type(&self) -> Result<Type, Error> {
         match self {
             Self::Bool(_) => Ok(Type::bool_type()),
             Self::Int(_) => Ok(Type::int_type()),
@@ -137,38 +144,38 @@ impl DataBox {
         }
     }
 
-    pub fn get_bool(&self) -> Result<bool, String> {
+    pub fn get_bool(&self) -> Result<bool, Error> {
         match self {
             Self::Bool(v) => Ok(*v),
-            _ => Err("not bool type".to_string()),
+            _ => Err(Error::RuntimeError("not bool type".to_string())),
         }
     }
 
-    pub fn get_int(&self) -> Result<i32, String> {
+    pub fn get_int(&self) -> Result<i32, Error> {
         match self {
             Self::Int(v) => Ok(*v),
-            _ => Err("not int type".to_string()),
+            _ => Err(Error::RuntimeError("not int type".to_string())),
         }
     }
 
-    pub fn get_long(&self) -> Result<i64, String> {
+    pub fn get_long(&self) -> Result<i64, Error> {
         match self {
             Self::Long(v) => Ok(*v),
-            _ => Err("not Long type".to_string()),
+            _ => Err(Error::RuntimeError("not Long type".to_string())),
         }
     }
 
-    fn get_float(&self) -> Result<f32, String> {
+    fn get_float(&self) -> Result<f32, Error> {
         match self {
             Self::Float(v) => Ok(*v),
-            _ => Err("not float type".to_string()),
+            _ => Err(Error::RuntimeError("not float type".to_string())),
         }
     }
 
-    fn get_string(&self) -> Result<String, String> {
+    fn get_string(&self) -> Result<String, Error> {
         match self {
             Self::String(v, _) => Ok(v.to_string()),
-            _ => Err("not String type".to_string()),
+            _ => Err(Error::RuntimeError("not String type".to_string())),
         }
     }
 
@@ -202,7 +209,7 @@ impl DataBox {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8], t: Type) -> Result<DataBox, String> {
+    pub fn from_bytes(bytes: &[u8], t: Type) -> Result<DataBox, Error> {
         let mut buf = BytesMut::new();
         buf.put_slice(bytes);
 
@@ -229,10 +236,10 @@ impl DataBox {
                 let n = t.get_size_in_bytes();
                 match String::from_utf8(buf.to_vec()) {
                     Ok(v) => Self::string_databox(v, n),
-                    Err(err) => Err(err.to_string()),
+                    Err(err) => Err(Error::RuntimeError(err.to_string())),
                 }
             },
-            _ => Err(format!("Unhandled TypeId {:?}", type_id).to_string())
+            _ => Err(Error::RuntimeError(format!("Unhandled TypeId {:?}", type_id).to_string()))
         }
     }
 }
@@ -713,8 +720,8 @@ mod tests {
 
     #[test]
     fn test_string_databox_equals() {
-        let foo = DataBox::string_databox("foo".to_string(), 3);
-        let zoo = DataBox::string_databox("zoo".to_string(), 3);
+        let foo = DataBox::string_databox("foo".to_string(), 3).unwrap();
+        let zoo = DataBox::string_databox("zoo".to_string(), 3).unwrap();
 
         assert_eq!(foo, foo);
         assert_eq!(zoo, zoo);
@@ -724,8 +731,8 @@ mod tests {
 
     #[test]
     fn test_string_databox_compare() {
-        let foo = DataBox::string_databox("foo".to_string(), 3);
-        let zoo = DataBox::string_databox("zoo".to_string(), 3);
+        let foo = DataBox::string_databox("foo".to_string(), 3).unwrap();
+        let zoo = DataBox::string_databox("zoo".to_string(), 3).unwrap();
 
         assert!(foo == foo);
         assert!(foo < zoo);
